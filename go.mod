@@ -1,4 +1,4 @@
-module github.com/coder/wgtunnel
+module github.com/ii/wgtunnel
 
 go 1.20
 
