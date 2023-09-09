@@ -79,7 +79,7 @@ jobs:
           make clean
           GOOS=windows GOARCH=amd64 make build
           mv build/tunneld tunneld-windows-amd64
-          mv build/tunnel tunnel-linux-amd64
+          mv build/tunnel tunnel-windows-amd64
           make clean
           make -j tunneld build/tunneld.tag
 
