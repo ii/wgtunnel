@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"cdr.dev/slog"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/hostrouter"
 	"github.com/riandyrn/otelchi"
@@ -227,8 +228,25 @@ allowed_ip=%s/128`,
 		api.nameCacheMu.Lock()
 		existingKey, nameExists := api.nameCache[name]
 		if nameExists && existingKey != req.PublicKey {
-			api.nameCacheMu.Unlock()
-			return tunnelsdk.ClientRegisterResponse{}, false, xerrors.Errorf("name %q is already taken", name)
+			// Check if the existing owner is still connected
+			existingIP, hasIP := api.nameToIP[name]
+			peerStillActive := false
+			if hasIP {
+				api.pkeyCacheMu.RLock()
+				if pkey, ok := api.pkeyCache[existingIP]; ok {
+					peerStillActive = time.Since(pkey.lastHandshake) <= api.PeerTimeout
+				}
+				api.pkeyCacheMu.RUnlock()
+			}
+			if peerStillActive {
+				api.nameCacheMu.Unlock()
+				return tunnelsdk.ClientRegisterResponse{}, false, xerrors.Errorf("name %q is already taken", name)
+			}
+			// Existing peer has timed out, allow takeover
+			api.Log.Info(context.Background(), "name takeover - previous owner timed out",
+				slog.F("name", name),
+				slog.F("old_ip", existingIP.String()),
+				slog.F("new_ip", ip.String()))
 		}
 		// Register or refresh the name
 		api.nameCache[name] = req.PublicKey
