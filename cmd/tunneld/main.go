@@ -56,8 +56,13 @@ func main() {
 			&cli.StringFlag{
 				Name:    "base-url",
 				Aliases: []string{"u"},
-				Usage:   "The base URL to use for the tunnel, including scheme. All tunnels will be subdomains of this hostname.",
+				Usage:   "The base URL to use for the API, including scheme. Used for routing API requests.",
 				EnvVars: []string{"TUNNELD_BASE_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "tunnel-domain",
+				Usage:   "The domain to use for tunnel URLs, including scheme. All tunnels will be subdomains of this hostname. If not set, base-url is used.",
+				EnvVars: []string{"TUNNELD_TUNNEL_DOMAIN"},
 			},
 			&cli.StringFlag{
 				Name:    "wireguard-endpoint",
@@ -142,6 +147,7 @@ func runApp(ctx *cli.Context) error {
 		verbose                = ctx.Bool("verbose")
 		listenAddress          = ctx.String("listen-address")
 		baseURL                = ctx.String("base-url")
+		tunnelDomain           = ctx.String("tunnel-domain")
 		wireguardEndpoint      = ctx.String("wireguard-endpoint")
 		wireguardPort          = ctx.Uint("wireguard-port")
 		wireguardKey           = ctx.String("wireguard-key")
@@ -206,6 +212,13 @@ func runApp(ctx *cli.Context) error {
 	if err != nil {
 		return xerrors.Errorf("could not parse base-url %q: %w", baseURL, err)
 	}
+	var tunnelDomainParsed *url.URL
+	if tunnelDomain != "" {
+		tunnelDomainParsed, err = url.Parse(tunnelDomain)
+		if err != nil {
+			return xerrors.Errorf("could not parse tunnel-domain %q: %w", tunnelDomain, err)
+		}
+	}
 	wireguardServerIPParsed, err := netip.ParseAddr(wireguardServerIP)
 	if err != nil {
 		return xerrors.Errorf("could not parse wireguard-server-ip %q: %w", wireguardServerIP, err)
@@ -248,6 +261,7 @@ func runApp(ctx *cli.Context) error {
 
 	options := &tunneld.Options{
 		BaseURL:                baseURLParsed,
+		TunnelDomain:           tunnelDomainParsed,
 		WireguardEndpoint:      wireguardEndpoint,
 		WireguardPort:          uint16(wireguardPort),
 		WireguardKey:           wireguardKeyParsed,

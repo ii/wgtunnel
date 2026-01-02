@@ -35,11 +35,17 @@ var newHostnameEncoder = base32.HexEncoding.WithPadding(base32.NoPadding)
 type Options struct {
 	Log slog.Logger
 
-	// BaseURL is the base URL to use for the tunnel, including scheme. All
-	// tunnels will be subdomains of this hostname.
+	// BaseURL is the base URL to use for the API, including scheme. This is
+	// used for routing API requests.
+	// e.g. "https://tunnel.example.com"
+	BaseURL *url.URL
+
+	// TunnelDomain is the domain to use for tunnel URLs, including scheme.
+	// All tunnels will be subdomains of this hostname.
 	// e.g. "https://tunnel.example.com" will place tunnels at
 	//      "https://xyz.tunnel.example.com"
-	BaseURL *url.URL
+	// If not set, BaseURL is used for tunnel URLs.
+	TunnelDomain *url.URL
 
 	// WireguardEndpoint is the UDP address advertised to clients that they will
 	// connect to for wireguard connections. It should be in the form
@@ -181,12 +187,18 @@ func (options *Options) WireguardPublicKeyToIPAndURLs(publicKey device.NoisePubl
 	// the first 64 bits of the hash of the public key.
 	copy(addrBytes[8:], keyHash[:8])
 
+	// Determine which domain to use for tunnel URLs
+	tunnelBase := options.BaseURL
+	if options.TunnelDomain != nil {
+		tunnelBase = options.TunnelDomain
+	}
+
 	// Good format:
 	goodFormatBytes := make([]byte, 8)
 	copy(goodFormatBytes, keyHash[:8])
 	goodFormat := newHostnameEncoder.EncodeToString(goodFormatBytes)
-	goodFormatURL := *options.BaseURL
-	goodFormatURL.Host = strings.ToLower(goodFormat) + "." + goodFormatURL.Host
+	goodFormatURL := *tunnelBase
+	goodFormatURL.Host = strings.ToLower(goodFormat) + "." + tunnelBase.Host
 
 	// Old format:
 	oldFormatBytes := make([]byte, 16)
@@ -194,8 +206,8 @@ func (options *Options) WireguardPublicKeyToIPAndURLs(publicKey device.NoisePubl
 	prefixLenBytes := options.WireguardNetworkPrefix.Bits() / 8
 	copy(oldFormatBytes[prefixLenBytes:], keyHash[:16-prefixLenBytes])
 	oldFormat := hex.EncodeToString(oldFormatBytes)
-	oldFormatURL := *options.BaseURL
-	oldFormatURL.Host = strings.ToLower(oldFormat) + "." + oldFormatURL.Host
+	oldFormatURL := *tunnelBase
+	oldFormatURL.Host = strings.ToLower(oldFormat) + "." + tunnelBase.Host
 
 	urls := []*url.URL{&goodFormatURL, &oldFormatURL}
 	if version == tunnelsdk.TunnelVersion1 {
