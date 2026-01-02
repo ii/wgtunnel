@@ -55,6 +55,10 @@ func (api *API) Router() http.Handler {
 
 	hr.Map(api.BaseURL.Host, apiRouter)
 	hr.Map("*."+api.BaseURL.Host, proxyRouter)
+	// If TunnelDomain is different from BaseURL, also route its wildcards to proxy
+	if api.TunnelDomain != nil && api.TunnelDomain.Host != api.BaseURL.Host {
+		hr.Map("*."+api.TunnelDomain.Host, proxyRouter)
+	}
 	hr.Map("*", unknownRouter)
 
 	proxyRouter.Use(
