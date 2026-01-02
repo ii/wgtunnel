@@ -281,28 +281,29 @@ func (api *API) handleTunnel(rw http.ResponseWriter, r *http.Request) {
 
 	host := r.Host
 	subdomain, _ := splitHostname(host)
-	subdomainParts := strings.Split(subdomain, "-")
-	user := subdomainParts[len(subdomainParts)-1]
 
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
 		attribute.Bool("proxy_request", true),
-		attribute.String("user", user),
+		attribute.String("subdomain", subdomain),
 	)
 
-	// First check if this is a named tunnel
+	// First check if the full subdomain is a named tunnel
 	var ip netip.Addr
 	var err error
 
 	api.nameCacheMu.RLock()
-	namedIP, isNamed := api.nameToIP[strings.ToLower(user)]
+	namedIP, isNamed := api.nameToIP[strings.ToLower(subdomain)]
 	api.nameCacheMu.RUnlock()
 
 	if isNamed {
 		ip = namedIP
 		span.SetAttributes(attribute.Bool("named_tunnel", true))
 	} else {
-		// Fall back to hash-based lookup
+		// Fall back to hash-based lookup using the last segment after splitting by "-"
+		// This handles legacy format like "prefix-HASH" where HASH is the encoded IP
+		subdomainParts := strings.Split(subdomain, "-")
+		user := subdomainParts[len(subdomainParts)-1]
 		ip, err = api.HostnameToWireguardIP(user)
 		if err != nil {
 			httpapi.Write(ctx, rw, http.StatusBadRequest, tunnelsdk.Response{
