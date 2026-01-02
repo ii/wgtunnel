@@ -9,6 +9,7 @@ import (
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -24,6 +25,24 @@ import (
 	"github.com/coder/wgtunnel/tunneld/httpmw"
 	"github.com/coder/wgtunnel/tunnelsdk"
 )
+
+// validNameRegex matches valid tunnel names: lowercase alphanumeric with hyphens,
+// 3-32 characters, must start and end with alphanumeric.
+var validNameRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$`)
+
+// validateName checks if a tunnel name is valid.
+func validateName(name string) error {
+	if len(name) < 3 {
+		return xerrors.New("name must be at least 3 characters")
+	}
+	if len(name) > 32 {
+		return xerrors.New("name must be at most 32 characters")
+	}
+	if !validNameRegex.MatchString(name) {
+		return xerrors.New("name must be lowercase alphanumeric with hyphens, starting and ending with alphanumeric")
+	}
+	return nil
+}
 
 func (api *API) Router() http.Handler {
 	var (
@@ -198,6 +217,29 @@ allowed_ip=%s/128`,
 		urlsStr[i] = u.String()
 	}
 
+	// Handle named tunnel registration
+	if req.Name != "" {
+		name := strings.ToLower(req.Name)
+		if err := validateName(name); err != nil {
+			return tunnelsdk.ClientRegisterResponse{}, false, xerrors.Errorf("invalid name: %w", err)
+		}
+
+		api.nameCacheMu.Lock()
+		existingKey, nameExists := api.nameCache[name]
+		if nameExists && existingKey != req.PublicKey {
+			api.nameCacheMu.Unlock()
+			return tunnelsdk.ClientRegisterResponse{}, false, xerrors.Errorf("name %q is already taken", name)
+		}
+		// Register or refresh the name
+		api.nameCache[name] = req.PublicKey
+		api.nameToIP[name] = ip
+		api.nameCacheMu.Unlock()
+
+		// Add named URL to the front of the list
+		namedURL := api.NameToURL(name)
+		urlsStr = append([]string{namedURL.String()}, urlsStr...)
+	}
+
 	return tunnelsdk.ClientRegisterResponse{
 		Version:         req.Version,
 		ReregisterWait:  api.PeerRegisterInterval,
@@ -226,13 +268,27 @@ func (api *API) handleTunnel(rw http.ResponseWriter, r *http.Request) {
 		attribute.String("user", user),
 	)
 
-	ip, err := api.HostnameToWireguardIP(user)
-	if err != nil {
-		httpapi.Write(ctx, rw, http.StatusBadRequest, tunnelsdk.Response{
-			Message: "Invalid tunnel URL.",
-			Detail:  err.Error(),
-		})
-		return
+	// First check if this is a named tunnel
+	var ip netip.Addr
+	var err error
+
+	api.nameCacheMu.RLock()
+	namedIP, isNamed := api.nameToIP[strings.ToLower(user)]
+	api.nameCacheMu.RUnlock()
+
+	if isNamed {
+		ip = namedIP
+		span.SetAttributes(attribute.Bool("named_tunnel", true))
+	} else {
+		// Fall back to hash-based lookup
+		ip, err = api.HostnameToWireguardIP(user)
+		if err != nil {
+			httpapi.Write(ctx, rw, http.StatusBadRequest, tunnelsdk.Response{
+				Message: "Invalid tunnel URL.",
+				Detail:  err.Error(),
+			})
+			return
+		}
 	}
 
 	api.pkeyCacheMu.RLock()
@@ -240,6 +296,9 @@ func (api *API) handleTunnel(rw http.ResponseWriter, r *http.Request) {
 	api.pkeyCacheMu.RUnlock()
 
 	if !ok || time.Since(pkey.lastHandshake) > api.PeerTimeout {
+		// Clean up any named tunnels for this IP when peer times out
+		api.cleanupNamesForIP(ip)
+
 		httpapi.Write(ctx, rw, http.StatusBadGateway, tunnelsdk.Response{
 			Message: "Peer is not connected.",
 			Detail:  "",
@@ -286,4 +345,19 @@ func splitHostname(hostname string) (subdomain string, rest string) {
 	}
 
 	return parts[0], parts[1]
+}
+
+// cleanupNamesForIP removes any named tunnel mappings for the given IP.
+// This should be called when a peer times out to release the name for others.
+func (api *API) cleanupNamesForIP(ip netip.Addr) {
+	api.nameCacheMu.Lock()
+	defer api.nameCacheMu.Unlock()
+
+	// Find and remove any names pointing to this IP
+	for name, nameIP := range api.nameToIP {
+		if nameIP == ip {
+			delete(api.nameToIP, name)
+			delete(api.nameCache, name)
+		}
+	}
 }

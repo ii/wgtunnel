@@ -28,6 +28,13 @@ type API struct {
 
 	pkeyCacheMu sync.RWMutex
 	pkeyCache   map[netip.Addr]cachedPeer
+
+	// nameCacheMu protects nameCache and nameToIP
+	nameCacheMu sync.RWMutex
+	// nameCache maps names to the public key that owns them
+	nameCache map[string]device.NoisePublicKey
+	// nameToIP maps names to their corresponding WireGuard IP
+	nameToIP map[string]netip.Addr
 }
 
 type cachedPeer struct {
@@ -85,6 +92,8 @@ listen_port=%d`,
 		wgNet:     wgNet,
 		wgDevice:  dev,
 		pkeyCache: make(map[netip.Addr]cachedPeer),
+		nameCache: make(map[string]device.NoisePublicKey),
+		nameToIP:  make(map[string]netip.Addr),
 		transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (nc net.Conn, err error) {
 				ctx, span := otel.GetTracerProvider().Tracer("").Start(ctx, "(http.Transport).DialContext")

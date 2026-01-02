@@ -171,6 +171,10 @@ type TunnelConfig struct {
 	// to generate a new key. It should be stored in a safe place for future
 	// tunnel sessions, otherwise you will get a new hostname.
 	PrivateKey Key
+	// Name is an optional human-readable name for the tunnel.
+	// If provided and available, the tunnel will be accessible at
+	// https://<name>.<tunnel-domain> in addition to the hash-based URLs.
+	Name string
 }
 
 // LaunchTunnel makes a request to the tunneld server to register the client's
@@ -187,6 +191,7 @@ func (c *Client) LaunchTunnel(ctx context.Context, cfg TunnelConfig) (*Tunnel, e
 	res, err := c.ClientRegister(ctx, ClientRegisterRequest{
 		Version:   cfg.Version,
 		PublicKey: pubKey,
+		Name:      cfg.Name,
 	})
 	if err != nil {
 		return nil, xerrors.Errorf("initial client registration: %w", err)
@@ -241,7 +246,9 @@ func (c *Client) LaunchTunnel(ctx context.Context, cfg TunnelConfig) (*Tunnel, e
 
 			ctx, cancel := context.WithTimeout(tunnelCtx, 10*time.Second)
 			res, err := c.ClientRegister(ctx, ClientRegisterRequest{
+				Version:   cfg.Version,
 				PublicKey: pubKey,
+				Name:      cfg.Name,
 			})
 			if err != nil && !errors.Is(err, context.Canceled) {
 				cfg.Log.Warn(ctx, "periodically re-register tunnel", slog.Error(err))

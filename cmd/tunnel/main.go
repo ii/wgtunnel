@@ -48,6 +48,12 @@ func main() {
 				Value:   "https://try.ii.nz",
 			},
 			&cli.StringFlag{
+				Name:    "name",
+				Aliases: []string{"n"},
+				Usage:   "Optional human-readable name for the tunnel (e.g., 'myproject'). Must be lowercase alphanumeric with hyphens, 3-32 chars.",
+				EnvVars: []string{"TUNNEL_NAME"},
+			},
+			&cli.StringFlag{
 				Name:    "wireguard-key",
 				Aliases: []string{"wg-key"},
 				Usage:   "The private key for the wireguard client. It should be base64 encoded. You must specify this or wireguard-key-file.",
@@ -74,6 +80,7 @@ func runApp(ctx *cli.Context) error {
 	var (
 		verbose          = ctx.Bool("verbose")
 		apiURL           = ctx.String("api-url")
+		tunnelName       = ctx.String("name")
 		wireguardKey     = ctx.String("wireguard-key")
 		wireguardKeyFile = ctx.String("wireguard-key-file")
 	)
@@ -137,6 +144,7 @@ func runApp(ctx *cli.Context) error {
 	tunnel, err := client.LaunchTunnel(ctx.Context, tunnelsdk.TunnelConfig{
 		Log:        logger,
 		PrivateKey: wireguardKeyParsed,
+		Name:       tunnelName,
 	})
 	if err != nil {
 		return xerrors.Errorf("launch tunnel: %w", err)

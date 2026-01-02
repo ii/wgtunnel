@@ -18,6 +18,11 @@ type Response struct {
 type ClientRegisterRequest struct {
 	Version   TunnelVersion         `json:"version"`
 	PublicKey device.NoisePublicKey `json:"public_key"`
+	// Name is an optional human-readable name for the tunnel.
+	// If provided and available, the tunnel will be accessible at
+	// https://<name>.<tunnel-domain> in addition to the hash-based URLs.
+	// Names must be lowercase alphanumeric with optional hyphens, 3-32 chars.
+	Name string `json:"name,omitempty"`
 }
 
 type ClientRegisterResponse struct {

@@ -258,3 +258,16 @@ func (options *Options) HostnameToWireguardIP(hostname string) (netip.Addr, erro
 	copy(addrBytes[8:], addrLast8Bytes[:])
 	return netip.AddrFrom16(addrBytes), nil
 }
+
+// NameToURL returns the tunnel URL for a given name.
+func (options *Options) NameToURL(name string) *url.URL {
+	// Use TunnelDomain if set, otherwise BaseURL
+	tunnelBase := options.BaseURL
+	if options.TunnelDomain != nil {
+		tunnelBase = options.TunnelDomain
+	}
+
+	namedURL := *tunnelBase
+	namedURL.Host = strings.ToLower(name) + "." + tunnelBase.Host
+	return &namedURL
+}
