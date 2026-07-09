@@ -45,7 +45,7 @@ func main() {
 				Name:    "api-url",
 				Usage:   "The base URL of the tunnel API.",
 				EnvVars: []string{"TUNNEL_API_URL"},
-				Value:   "https://try.ii.nz",
+				Value:   "https://iimatey.sharing.io",
 			},
 			&cli.StringFlag{
 				Name:    "name",
