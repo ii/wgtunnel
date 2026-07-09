@@ -58,7 +58,6 @@ func main() {
 				Aliases: []string{"wg-key"},
 				Usage:   "The private key for the wireguard client. It should be base64 encoded. You must specify this or wireguard-key-file.",
 				EnvVars: []string{"TUNNEL_WIREGUARD_KEY"},
-				Value:   b64.StdEncoding.EncodeToString([]byte(uniuri.NewLen(32))),
 			},
 			&cli.StringFlag{
 				Name:    "wireguard-key-file",
@@ -88,7 +87,8 @@ func runApp(ctx *cli.Context) error {
 		return xerrors.New("api-url is required. See --help for more information.")
 	}
 	if wireguardKey == "" && wireguardKeyFile == "" {
-		return xerrors.New("wireguard-key or wireguard-key-file is required. See --help for more information.")
+		// Neither given: generate a fresh ephemeral key (previous default behaviour).
+		wireguardKey = b64.StdEncoding.EncodeToString([]byte(uniuri.NewLen(32)))
 	}
 	if wireguardKey != "" && wireguardKeyFile != "" {
 		return xerrors.New("Only one of wireguard-key or wireguard-key-file can be specified. See --help for more information.")
