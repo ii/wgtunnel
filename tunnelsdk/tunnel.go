@@ -177,6 +177,13 @@ type TunnelConfig struct {
 	// If provided and available, the tunnel will be accessible at
 	// https://<name>.<tunnel-domain> in addition to the hash-based URLs.
 	Name string
+	// WireguardMTU overrides the MTU the server hands out at registration
+	// (0 = use the server's value, normally 1280). The client is userspace
+	// netstack, so this is the ONLY way to change its MTU — there is no
+	// kernel interface for `ip link set`. Clamp it lower on paths that
+	// black-hole full-size wireguard UDP datagrams (seen live: WSL box —
+	// small frames passed, screen-sized frames stalled).
+	WireguardMTU int
 }
 
 // LaunchTunnel makes a request to the tunneld server to register the client's
@@ -276,12 +283,19 @@ func (c *Client) LaunchTunnel(ctx context.Context, cfg TunnelConfig) (*Tunnel, e
 	}()
 
 	// Create wireguard virtual network stack.
+	mtu := res.WireguardMTU
+	if cfg.WireguardMTU > 0 {
+		cfg.Log.Info(ctx, "overriding wireguard MTU",
+			slog.F("server_mtu", res.WireguardMTU),
+			slog.F("override_mtu", cfg.WireguardMTU))
+		mtu = cfg.WireguardMTU
+	}
 	tun, tnet, err := netstack.CreateNetTUN(
 		[]netip.Addr{res.ClientIP},
 		// We don't resolve hostnames in the tunnel, so we don't need a DNS
 		// server.
 		[]netip.Addr{},
-		res.WireguardMTU,
+		mtu,
 	)
 	if err != nil {
 		return nil, xerrors.Errorf("create net TUN: %w", err)

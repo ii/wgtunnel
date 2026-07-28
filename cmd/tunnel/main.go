@@ -53,6 +53,13 @@ func main() {
 				Usage:   "Optional human-readable name for the tunnel (e.g., 'myproject'). Must be lowercase alphanumeric with hyphens, 3-32 chars.",
 				EnvVars: []string{"TUNNEL_NAME"},
 			},
+			&cli.IntFlag{
+				Name:    "wireguard-mtu",
+				Aliases: []string{"mtu"},
+				Usage:   "Override the wireguard MTU (0 = use the server-provided value, normally 1280). WARNING: found live that the client and server MTUs must MATCH — any mismatch (even 1279 vs 1280) breaks the data path entirely. Only useful in lockstep with an equal tunneld-side --wireguard-mtu; this is a lab/coordinated-rollout knob, not a per-client fix.",
+				Value:   0,
+				EnvVars: []string{"TUNNEL_MTU"},
+			},
 			&cli.StringFlag{
 				Name:    "wireguard-key",
 				Aliases: []string{"wg-key"},
@@ -82,6 +89,7 @@ func runApp(ctx *cli.Context) error {
 		tunnelName       = ctx.String("name")
 		wireguardKey     = ctx.String("wireguard-key")
 		wireguardKeyFile = ctx.String("wireguard-key-file")
+		wireguardMTU     = ctx.Int("wireguard-mtu")
 	)
 	if apiURL == "" {
 		return xerrors.New("api-url is required. See --help for more information.")
@@ -142,9 +150,10 @@ func runApp(ctx *cli.Context) error {
 
 	client := tunnelsdk.New(apiURLParsed)
 	tunnel, err := client.LaunchTunnel(ctx.Context, tunnelsdk.TunnelConfig{
-		Log:        logger,
-		PrivateKey: wireguardKeyParsed,
-		Name:       tunnelName,
+		Log:          logger,
+		PrivateKey:   wireguardKeyParsed,
+		Name:         tunnelName,
+		WireguardMTU: wireguardMTU,
 	})
 	if err != nil {
 		return xerrors.Errorf("launch tunnel: %w", err)
