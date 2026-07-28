@@ -306,9 +306,16 @@ func (api *API) handleTunnel(rw http.ResponseWriter, r *http.Request) {
 		user := subdomainParts[len(subdomainParts)-1]
 		ip, err = api.HostnameToWireguardIP(user)
 		if err != nil {
-			httpapi.Write(ctx, rw, http.StatusBadRequest, tunnelsdk.Response{
-				Message: "Invalid tunnel URL.",
-				Detail:  err.Error(),
+			// Reaching here means the subdomain is neither a currently
+			// registered name nor a parseable hash hostname. To the visitor
+			// that simply means "no such tunnel" — the old response leaked
+			// the base32 decode internals ("invalid new hostname length:
+			// got 3, expected 8") for any expired or mistyped name.
+			httpapi.Write(ctx, rw, http.StatusNotFound, tunnelsdk.Response{
+				Message: fmt.Sprintf("No tunnel registered under %q.", subdomain),
+				Detail: "Names disappear shortly after their tunnel client disconnects — " +
+					"restart the tunnel (e.g. `iimatey start " + subdomain + "`) to re-register it. " +
+					"(Hostname also does not parse as a hash-style tunnel URL: " + err.Error() + ")",
 			})
 			return
 		}
