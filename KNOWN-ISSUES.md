@@ -1,6 +1,6 @@
 # Known issues (ii fork)
 
-## Symmetric WireguardMTU != 1280 breaks the data path entirely
+## RESOLVED (root cause found): WireguardMTU below 1280 cannot work — IPv6 minimum MTU
 
 Found live on nextral 2026-07-28 (tunneld 0.1.21-sharing, client
 v0.1.19-sharing), clean A/B/A:
@@ -30,3 +30,22 @@ NATs (Windows/WSL) black-hole the fragments — small frames pass, screen-sized
 output vanishes (`iimatey-probe` exit 4 signature). Lockstep MTU 1200 would
 fit the tailscale hop without fragmentation and fix those clients — once
 symmetric non-1280 works.
+
+### Root cause (2026-07-28, local lab A/B over loopback)
+
+Symmetric 1280: works. Symmetric **1400: works**. Symmetric 1200: dead
+(even small requests). The floor is exactly 1280 because the tunnel's
+inner network is IPv6-only (`wireguard-server-ip` "Must be an IPv6
+address") and RFC 8200 mandates a minimum link MTU of 1280 for IPv6 —
+gvisor/netstack correctly refuses to operate below it. Not a hidden
+constant, not a bug.
+
+Consequences:
+- Lockstep MTU lowering below 1280 is impossible while the inner net is
+  v6; the `--wireguard-mtu` knobs are valid only for values >= 1280 (and
+  the ends must still match).
+- Fixing fragmentation on a sub-1340 underlay hop (e.g. tailscale's 1280)
+  therefore means raising the UNDERLAY MTU (e.g. TS_DEBUG_MTU on both
+  tailscale ends of the hop), relocating tunneld to a 1500-MTU vantage,
+  or making the fragment-dropping NAT tolerate fragments — not lowering
+  the wireguard MTU.
