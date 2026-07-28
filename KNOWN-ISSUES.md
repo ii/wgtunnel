@@ -49,3 +49,16 @@ Consequences:
   tailscale ends of the hop), relocating tunneld to a 1500-MTU vantage,
   or making the fragment-dropping NAT tolerate fragments — not lowering
   the wireguard MTU.
+
+### DEPLOYED FIX (2026-07-28): underlay MTU raised — fragmentation eliminated
+
+TS_DEBUG_MTU=1360 set in /etc/default/tailscaled on BOTH ends of the
+oci-ingress <-> nextral leg (tailscale0 mtu 1360 verified both ends,
+direct path ~50ms). Outer wireguard datagrams (~1340 at inner-1280) now
+fit the hop with no IP fragmentation, so fragment-hostile NATs
+(Windows/WSL etc.) never see fragments. Verified: DF-ping 1300B passes /
+1368B correctly rejected; iimatey-probe reports large ~1300B frames
+surviving both ways (exit 0) through the public path.
+
+Rollback if anything regresses: remove the TS_DEBUG_MTU line + restart
+tailscaled, both ends.
