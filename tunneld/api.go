@@ -311,7 +311,11 @@ func (api *API) handleTunnel(rw http.ResponseWriter, r *http.Request) {
 			// that simply means "no such tunnel" — the old response leaked
 			// the base32 decode internals ("invalid new hostname length:
 			// got 3, expected 8") for any expired or mistyped name.
-			httpapi.Write(ctx, rw, http.StatusNotFound, tunnelsdk.Response{
+			// Status stays 400 (not the semantically-nicer 404) because the
+			// sharing.io traefik runs a rewrite-404/error-pages middleware
+			// that would replace this body with a generic HTML page —
+			// found live: the friendly message never reached the browser.
+			httpapi.Write(ctx, rw, http.StatusBadRequest, tunnelsdk.Response{
 				Message: fmt.Sprintf("No tunnel registered under %q.", subdomain),
 				Detail: "Names disappear shortly after their tunnel client disconnects — " +
 					"restart the tunnel (e.g. `iimatey start " + subdomain + "`) to re-register it. " +
